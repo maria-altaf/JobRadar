@@ -530,15 +530,24 @@ JS = """
     if (isNaN(t)) return;
     var hours = (now - t) / 3600000;
     var limit = parseFloat(b.dataset.staleHours || '30');
-    if (hours > limit && b.dataset.state !== 'critical') {
+    var icon = b.querySelector('[data-role="icon"]');
+    var title = b.querySelector('[data-role="title"]');
+
+    if (hours > limit) {
       // It has gone stale since this page was built. Say so.
-      b.classList.remove('banner-good', 'banner-warning');
-      b.classList.add('banner-critical');
-      b.dataset.state = 'critical';
-      var icon = b.querySelector('[data-role="icon"]');
-      var title = b.querySelector('[data-role="title"]');
-      if (icon) icon.textContent = '✕';
+      if (b.dataset.state !== 'critical') {
+        b.classList.remove('banner-good', 'banner-warning');
+        b.classList.add('banner-critical');
+        b.dataset.state = 'critical';
+        if (icon) icon.textContent = '✕';
+      }
       if (title) title.textContent = 'Stale — no successful run in ' + ago(now - t).replace(' ago','');
+    } else if (b.dataset.state === 'good' && title) {
+      // Still healthy, but the headline embeds an age that was rendered at
+      // build time. Left alone it would keep reporting "41 min ago" for up to
+      // the whole staleness window -- green and wrong, which is the failure
+      // this recomputation exists to prevent.
+      title.textContent = 'Healthy — last success ' + ago(now - t);
     }
   }
   freshen();

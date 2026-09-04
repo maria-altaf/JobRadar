@@ -211,6 +211,14 @@ class TestFreshness:
         assert "addEventListener('focus', freshen)" in html
         assert "visibilitychange" in html
 
+    def test_a_healthy_headline_is_also_recomputed(self, site):
+        # The banner headline embeds an age ("last success 41 min ago"). Only
+        # rewriting it once the page goes critical would leave it reporting a
+        # build-time number for the whole 30-hour window -- green and wrong.
+        out, _ = site
+        html = (out / "index.html").read_text(encoding="utf-8")
+        assert "'Healthy — last success '" in html
+
     def test_the_page_can_turn_itself_red(self, site):
         # Without this the page would keep claiming green forever after the
         # pipeline stopped, which is the worst possible failure for a health

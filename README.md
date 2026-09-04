@@ -10,8 +10,23 @@ and when the whole thing runs twice by accident.
 
 [![tests](https://github.com/maria-altaf/JobRadar/actions/workflows/tests.yml/badge.svg)](https://github.com/maria-altaf/JobRadar/actions/workflows/tests.yml)
 [![scrape](https://github.com/maria-altaf/JobRadar/actions/workflows/scrape.yml/badge.svg)](https://github.com/maria-altaf/JobRadar/actions/workflows/scrape.yml)
+![python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)
+![tests](https://img.shields.io/badge/tests-230-brightgreen)
+[![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
 
 <!-- LIVE-URL -->
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/dashboard-dark.png">
+  <img src="docs/dashboard.png"
+       alt="The jobradar dashboard. A green health banner reads 'Healthy — last success 43m ago, 1 consecutive day green, considered stale after 30h'. Stat tiles show 907 postings stored, 875 distinct jobs after fingerprint grouping, 741 companies, 32 duplicates collapsed, 116 with salary, and 70 quarantined on the last run. Below is a stacked bar chart of new postings per day, coloured by source.">
+</picture>
+
+<sub>Real data from a scheduled run. Full page:
+[light](docs/dashboard-full.png) ·
+[dark](docs/dashboard-full-dark.png). The health banner recomputes its own
+freshness in the browser, so a page nobody has rebuilt in a week reports itself
+stale instead of staying green.</sub>
 
 ---
 
