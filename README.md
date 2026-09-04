@@ -167,9 +167,13 @@ Three defences:
   will never succeed.
 - **Two layers.** The HTTP client retries within a request; the task is then
   re-queued up to `task_max_attempts` times within the run.
-- **A partly-finished run is still useful.** One dead source does not fail the
-  others; the run is marked `partial` and the health checks judge whether the
-  data is sound.
+- **A partly-finished run is still useful.** One dead source does not stop the
+  others from being collected, and previously stored data is never removed
+  because a fetch failed.
+- **But a dead source is still a failure.** A run with some failed tasks and
+  sound data is `partial` and passes. A source whose tasks *all* failed trips
+  `source_reachable:<name>` and fails the run — nothing was collected from it,
+  and that is not a qualified success.
 
 ### When you kill it mid-run
 
@@ -289,7 +293,7 @@ jobradar run --no-resume      # force a fresh run
 jobradar run --sources remoteok
 jobradar status               # health and recent runs
 jobradar serve                # dashboard at http://127.0.0.1:8000
-pytest -q                     # 192 tests, no database service needed
+pytest -q                     # 205 tests, no database service needed
 ```
 
 Everything tunable lives in environment variables — see `.env.example`.
@@ -333,7 +337,125 @@ starts.
 
 ## Incidents
 
-<!-- INCIDENTS -->
+A running log. Production incidents are appended as they happen; the entries
+below are from bringing the pipeline up, and are kept because each one changed
+the design rather than just the code.
+
+### 2026-09-04 — The HN parser was silently mangling a quarter of its input
+
+**Symptom.** The first full run quarantined 112 of 1,201 records, all from
+Hacker News. The reasons looked like ordinary human noise — "header line does
+not use the pipe convention" — so it was tempting to accept them.
+
+**What it actually was.** Reading the quarantined payloads instead of the
+counts showed truncation:
+
+```
+'Sudowrite |'
+'Eleos Technologies ('
+'MONUMENTAL |'
+```
+
+Every one cut off at the first inline tag. The parser split comments into lines
+with `get_text("\n")`, which inserts a break at *every* element boundary — and
+posters routinely put their company URL inline in the header. So
+`Sudowrite | <a>https://…</a> | Senior Engineer` became `Sudowrite |`, and a
+perfectly well-formed posting looked unparseable.
+
+**Fix.** Break only on genuine block boundaries (`<p>`, `<br>`) and join the
+rest with no separator, which preserves the original spacing because HN's own
+text nodes already carry it. Valid headers went from 184/231 to 215/231.
+
+**Then a second bug fell out of the first.** With headers no longer truncated,
+`QUOBYTE | Berlin, Germany | ONSITE` was storing **"Berlin, Germany" as the job
+title**. The classifier identified roles by elimination — anything that was not
+an employment type or a recognised remote-ish word became the title — and the
+pipe convention fixes no field order, so a bare city walked straight into the
+title slot.
+
+Rewritten to identify roles *positively*, by matching role vocabulary
+(`engineer`, `designer`, `counsel`, …) first. That made titles correct but
+pushed quarantine *up* to 21%, because a large minority of posts genuinely put
+no role in the header at all — it is on the next line. So the parser now falls
+back to reading a role from the body, with URLs stripped and prose rejected,
+and tags such rows `title-from-body` so the weaker provenance stays visible.
+
+**Result:** 199/231 valid (86%), quarantine down from 25% to 13.9%, and the
+titles are actually titles.
+
+**What it changed.** Quarantine is not a bin to check the size of. The reasons
+have to be *read*, and a quarantine rate that looks plausible can be hiding a
+parser defect rather than reporting source noise.
+
+### 2026-09-04 — A crashed run wedged recovery for an hour
+
+**Symptom.** The first run of `scripts/resume_proof.py` failed. The kill worked,
+the ledger was correct, but the restart did nothing at all: 4 tasks done before
+the kill, 4 tasks done after.
+
+**Cause.** The run lock. A killed process cannot release it, and the lease was
+an hour long, so the restart hit `LockNotAcquired` and — correctly, by its own
+rules — exited quietly, because an overlapping schedule is not worth alerting
+on. The lock was doing exactly what it was told to do. What it was told was
+wrong: recovery from a crash was gated behind a full hour.
+
+**Fix.** The lease only needs to outlive a couple of missed heartbeats, not a
+whole run, since a live run renews it every 60s. Dropped from 3600s to 300s, so
+a crashed run is recoverable within five minutes instead of an hour.
+
+**What it changed.** A safety mechanism sized against the *happy* path (how
+long might a run legitimately take?) was the wrong question. The right one is
+what it costs when the process dies — because that is the only time the timeout
+is ever load-bearing.
+
+### 2026-09-04 — A totally dead source was reported as merely "degraded"
+
+**Symptom.** Found by writing `tests/test_breakage.py`, which drives the whole
+pipeline against a source that has broken in a specific way and asserts on the
+run's *verdict*. Three of the first thirteen failed. When every task for the
+only source failed — the site returning 503, or HTML where JSON was expected —
+the run came back `partial` instead of `failed`. Nothing was stored, and the
+pipeline called that a qualified success.
+
+**Cause.** Vacuous truth. The "nothing changed at the source" exemption was:
+
+```python
+all_304 = bool(outcomes) and all(o.not_modified for o in outcomes if o.ok)
+```
+
+With every task failed there are no `o.ok` outcomes, so the generator is empty
+and `all()` returns `True`. "Everything failed" and "nothing changed" became
+indistinguishable, and the exemption meant to *excuse* a quiet day was
+suppressing a total outage. The parser-health check had the same shape and the
+same hole.
+
+**Fix.** Derive the exemption from the successful outcomes only, so an empty set
+is falsy rather than vacuously true. Added an explicit `source_reachable:<name>`
+check as well, which states the condition directly instead of leaving it to be
+inferred from an emptiness test.
+
+**What it changed.** The unit tests for `evaluate_health` all passed throughout
+— they fed it hand-built outcome lists that always contained a success. Only
+driving the real pipeline into a real outage produced the input that broke it.
+`all()` over a filtered generator is worth a second look every time.
+
+### 2026-09-04 — The "new today" figure was overcounting
+
+**Symptom.** A run reported 923 new postings; the table held 906 rows.
+
+**Cause.** Per-task counters. Each worker read the existing `content_hash` to
+classify a row as new/updated/unchanged before writing it, and two concurrent
+tasks carrying the same posting both saw "not present" and both counted it as
+new. The *data* was never wrong — the upsert stored exactly one row — but the
+headline number on the dashboard overstated reality.
+
+**Fix.** Stopped trusting the tallies. A `last_changed_run_id` column, stamped
+only when the content actually changes, lets the run's totals be recomputed
+from the table itself at the end of the run. Now reports 906 for 906 rows.
+
+**What it changed.** Counters accumulated by concurrent workers are a
+measurement of the workers, not of the database. If a number is going on a
+dashboard, derive it from the state, not from the process that produced it.
 
 ---
 

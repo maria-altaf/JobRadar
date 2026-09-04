@@ -581,7 +581,13 @@ def evaluate_health(
     valid = sum(o.items_valid for o in outcomes)
     bad = sum(o.items_quarantined for o in outcomes)
     failed_tasks = [o for o in outcomes if not o.ok]
-    all_304 = bool(outcomes) and all(o.not_modified for o in outcomes if o.ok)
+
+    # Derived from the *successful* outcomes only. Deriving it from all of them
+    # made "everything failed" indistinguishable from "nothing changed": with no
+    # successful outcomes the generator is empty and all() is vacuously true, so
+    # a total outage claimed the 304 exemption and passed as merely degraded.
+    succeeded = [o for o in outcomes if o.ok]
+    all_304 = bool(succeeded) and all(o.not_modified for o in succeeded)
 
     # 1. quarantine rate
     rate = (bad / seen) if seen else 0.0
@@ -607,11 +613,29 @@ def evaluate_health(
         }
     )
 
-    # 3. per-source parser health against each source's own trailing median
-    baselines = source_baselines(engine)
+    # 3. a source whose every task failed is down, not merely degraded
     per_source: dict[str, int] = {}
     for o in outcomes:
         per_source[o.source] = per_source.get(o.source, 0) + o.items_valid
+
+    for source in sorted({o.source for o in outcomes}):
+        attempts = [o for o in outcomes if o.source == source]
+        if attempts and all(not o.ok for o in attempts):
+            errors = {o.error for o in attempts if o.error}
+            checks.append(
+                {
+                    "name": f"source_reachable:{source}",
+                    "ok": False,
+                    "value": 0,
+                    "detail": (
+                        f"every one of {source}'s {len(attempts)} task(s) failed: "
+                        + "; ".join(sorted(errors))[:300]
+                    ),
+                }
+            )
+
+    # 4. per-source parser health against each source's own trailing median
+    baselines = source_baselines(engine)
 
     for source, baseline in baselines.items():
         current = per_source.get(source, 0)
@@ -619,9 +643,10 @@ def evaluate_health(
         if baseline < 10:
             continue
         floor = baseline * settings.parser_health_ratio
-        source_all_304 = bool(
-            [o for o in outcomes if o.source == source]
-        ) and all(o.not_modified for o in outcomes if o.source == source and o.ok)
+        source_succeeded = [o for o in outcomes if o.source == source and o.ok]
+        source_all_304 = bool(source_succeeded) and all(
+            o.not_modified for o in source_succeeded
+        )
         ok = current >= floor or source_all_304
         checks.append(
             {
