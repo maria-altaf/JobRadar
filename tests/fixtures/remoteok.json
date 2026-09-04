@@ -1,0 +1,88 @@
+[
+  {
+    "last_updated": 1788462746,
+    "legal": "API Terms of Service: Please link back (with follow, and without nofollow!) to the URL on Remote OK and mention Remote OK as a source, so we get traffic back from your site. If you do not we'll have to suspend API access.\n\nPlease don't use the Remote OK logo without written permission as it's a registered trademark, please DO use our name Remote OK though."
+  },
+  {
+    "slug": "remote-senior-backend-engineer-northwind-1137305",
+    "id": "1137305",
+    "epoch": 1788406581,
+    "date": "2026-09-03T03:36:21+00:00",
+    "company": "Northwind Systems",
+    "company_logo": "",
+    "position": "Senior Backend Engineer",
+    "tags": ["backend", "python", "postgres"],
+    "description": "<p>Build and run our ingestion platform.</p>",
+    "location": "Worldwide",
+    "salary_min": 120000,
+    "salary_max": 170000,
+    "apply_url": "https://remoteok.com/l/1137305",
+    "url": "https://remoteok.com/remote-jobs/remote-senior-backend-engineer-northwind-1137305",
+    "logo": ""
+  },
+  {
+    "slug": "remote-product-designer-lumen-1137306",
+    "id": "1137306",
+    "epoch": 1788410000,
+    "date": "2026-09-03T04:33:20+00:00",
+    "company": "Lumen Labs",
+    "position": "Product Designer",
+    "tags": ["design", "figma"],
+    "description": "<p>Own the design system.</p>",
+    "location": "Europe",
+    "salary_min": 0,
+    "salary_max": 0,
+    "url": "https://remoteok.com/remote-jobs/remote-product-designer-lumen-1137306"
+  },
+  {
+    "slug": "no-url-but-has-slug-1137307",
+    "id": "1137307",
+    "date": "2026-09-03T05:00:00+00:00",
+    "company": "Slugonly Inc",
+    "position": "Data Engineer",
+    "tags": ["data"],
+    "description": "<p>URL must be derived from the slug.</p>",
+    "location": "Remote"
+  },
+  {
+    "slug": "missing-id-1137308",
+    "epoch": 1788411111,
+    "company": "Anonymous Co",
+    "position": "Ghost Role",
+    "tags": [],
+    "description": "<p>QUARANTINE: no id field, so no stable identity.</p>",
+    "location": "Remote"
+  },
+  {
+    "id": "1137309",
+    "date": "2026-09-03T06:00:00+00:00",
+    "company": "",
+    "position": "Engineer With No Company",
+    "tags": [],
+    "description": "<p>QUARANTINE: empty company name.</p>",
+    "location": "Remote",
+    "url": "https://remoteok.com/remote-jobs/1137309"
+  },
+  {
+    "id": "1137310",
+    "date": "2026-09-03T07:00:00+00:00",
+    "company": "Backwards Salary Ltd",
+    "position": "Inverted Range Engineer",
+    "tags": [],
+    "description": "<p>QUARANTINE: salary_min above salary_max.</p>",
+    "location": "Remote",
+    "salary_min": 200000,
+    "salary_max": 90000,
+    "url": "https://remoteok.com/remote-jobs/1137310"
+  },
+  {
+    "id": "1137311",
+    "date": "2199-01-01T00:00:00+00:00",
+    "company": "Time Traveller Inc",
+    "position": "Future Engineer",
+    "tags": [],
+    "description": "<p>QUARANTINE: posted far in the future.</p>",
+    "location": "Remote",
+    "url": "https://remoteok.com/remote-jobs/1137311"
+  }
+]

@@ -1,0 +1,9 @@
+# Normalise line endings so the repo is identical on Windows, Linux runners
+# and the Vercel build. Without this the CRLF the local checkout produces shows
+# up as a whole-file diff for anyone on another platform.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary

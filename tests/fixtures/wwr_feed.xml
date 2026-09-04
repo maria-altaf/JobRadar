@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Trimmed from a real weworkremotely.com category feed. Element names and
+  nesting match the live feed exactly (verified against
+  /categories/remote-devops-sysadmin-jobs.rss). The last three items are
+  deliberately malformed to exercise the quarantine path.
+-->
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:media="http://search.yahoo.com/mrss">
+  <channel>
+    <title>We Work Remotely: Remote jobs in design, programming, marketing and more</title>
+    <link>https://weworkremotely.com/categories/remote-programming-jobs.rss</link>
+    <description>We Work Remotely</description>
+    <language>en-US</language>
+    <ttl>60</ttl>
+
+    <item>
+      <media:content url="https://wwr-pro.s3.amazonaws.com/logos/0171/6206/logo.gif" type="image/png"/>
+      <title>CircleCI: Senior Software Engineer</title>
+      <region>Anywhere in the World</region>
+      <country></country>
+      <state></state>
+      <skills></skills>
+      <category>DevOps and Sysadmin</category>
+      <type>Full-Time</type>
+      <description>&lt;p&gt;&lt;strong&gt;Headquarters:&lt;/strong&gt; Remote, Ontario, Canada&lt;/p&gt;&lt;h2&gt;About CircleCI Engineering&lt;/h2&gt;&lt;p&gt;CI/CD has been solved. Now it is being reinvented.&lt;/p&gt;</description>
+      <pubDate>Mon, 31 Aug 2026 07:30:46 +0000</pubDate>
+      <expires_at>Wed, 30 Sep 2026 07:30:46 +0000</expires_at>
+      <guid>https://weworkremotely.com/remote-jobs/circleci-senior-software-engineer</guid>
+      <link>https://weworkremotely.com/remote-jobs/circleci-senior-software-engineer</link>
+    </item>
+
+    <item>
+      <title>Collaboration.Ai: Senior Software AI Engineer </title>
+      <region>Anywhere in the World</region>
+      <country>United States</country>
+      <state>Minnesota</state>
+      <skills>Python, LLMs</skills>
+      <category>Back-End Programming</category>
+      <type>Full-Time</type>
+      <description>&lt;p&gt;&lt;strong&gt;Headquarters:&lt;/strong&gt; Minneapolis, MN&lt;/p&gt;&lt;p&gt;We unite people, technology, and purpose.&lt;/p&gt;</description>
+      <pubDate>Tue, 01 Sep 2026 11:02:00 +0000</pubDate>
+      <guid>https://weworkremotely.com/remote-jobs/collaboration-ai-senior-software-ai-engineer</guid>
+      <link>https://weworkremotely.com/remote-jobs/collaboration-ai-senior-software-ai-engineer</link>
+    </item>
+
+    <!-- Colon inside the company name: the split must take the FIRST colon. -->
+    <item>
+      <title>Acme: Systems: Staff Platform Engineer</title>
+      <region>Europe only</region>
+      <category>DevOps and Sysadmin</category>
+      <type>Contract</type>
+      <description>&lt;p&gt;Kubernetes, Terraform.&lt;/p&gt;</description>
+      <pubDate>Wed, 02 Sep 2026 09:15:00 +0000</pubDate>
+      <guid>https://weworkremotely.com/remote-jobs/acme-systems-staff-platform-engineer</guid>
+      <link>https://weworkremotely.com/remote-jobs/acme-systems-staff-platform-engineer</link>
+    </item>
+
+    <!-- QUARANTINE: no colon, so company and role cannot be separated. -->
+    <item>
+      <title>We are looking for a great engineer</title>
+      <region>Anywhere in the World</region>
+      <category>Back-End Programming</category>
+      <type>Full-Time</type>
+      <description>&lt;p&gt;No structure at all.&lt;/p&gt;</description>
+      <pubDate>Wed, 02 Sep 2026 10:00:00 +0000</pubDate>
+      <guid>https://weworkremotely.com/remote-jobs/no-colon-here</guid>
+      <link>https://weworkremotely.com/remote-jobs/no-colon-here</link>
+    </item>
+
+    <!-- QUARANTINE: no guid and no link, so the item has no stable identity. -->
+    <item>
+      <title>Ghost Corp: Backend Engineer</title>
+      <region>Anywhere in the World</region>
+      <category>Back-End Programming</category>
+      <type>Full-Time</type>
+      <description>&lt;p&gt;Nothing to key on.&lt;/p&gt;</description>
+      <pubDate>Wed, 02 Sep 2026 10:30:00 +0000</pubDate>
+    </item>
+
+    <!-- QUARANTINE: empty title. -->
+    <item>
+      <title></title>
+      <region>Anywhere in the World</region>
+      <category>Back-End Programming</category>
+      <type>Full-Time</type>
+      <description>&lt;p&gt;Empty title.&lt;/p&gt;</description>
+      <pubDate>Wed, 02 Sep 2026 11:00:00 +0000</pubDate>
+      <guid>https://weworkremotely.com/remote-jobs/empty-title</guid>
+      <link>https://weworkremotely.com/remote-jobs/empty-title</link>
+    </item>
+
+  </channel>
+</rss>

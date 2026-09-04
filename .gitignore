@@ -1,0 +1,34 @@
+# Secrets -- the database URL contains credentials and must never be committed.
+.env
+.env.*
+!.env.example
+
+# Local database files
+data/
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Vercel
+.vercel/

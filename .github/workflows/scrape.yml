@@ -1,0 +1,126 @@
+name: scrape
+
+# The scheduler. Two triggers:
+#   - the cron, which is the unattended daily run;
+#   - workflow_dispatch, so a run can be forced by hand when investigating.
+#
+# Alerting: this job's exit code IS the alert. `jobradar run` exits non-zero
+# when the run fails its health checks, which fails the job, which makes GitHub
+# send its workflow-failure email. No extra service to keep alive.
+on:
+  schedule:
+    # 06:15 UTC daily. Deliberately not on the hour: GitHub's scheduled runs
+    # queue behind everyone else's, and the top of the hour is the worst of it.
+    - cron: "15 6 * * *"
+  workflow_dispatch:
+    inputs:
+      no_resume:
+        description: "Start a fresh run instead of continuing an unfinished one"
+        type: boolean
+        default: false
+      sources:
+        description: "Limit to these sources (space separated), or blank for all"
+        type: string
+        default: ""
+
+concurrency:
+  # Never let two scrapes overlap. The pipeline also takes a database lock, so
+  # this is belt and braces -- but failing fast here is cheaper than starting a
+  # job that immediately exits on a held lock.
+  group: jobradar-scrape
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    # The HN crawl-delay of 30s dominates the wall-clock; 20 minutes is a
+    # generous ceiling that still catches a genuine hang.
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Run the pipeline
+        id: run
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          JOBRADAR_TRIGGER: ${{ github.event_name }}
+          JOBRADAR_USER_AGENT: ${{ vars.JOBRADAR_USER_AGENT }}
+        run: |
+          jobradar run \
+            --trigger "${{ github.event_name }}" \
+            ${{ inputs.no_resume && '--no-resume' || '' }} \
+            ${{ inputs.sources && format('--sources {0}', inputs.sources) || '' }}
+
+      # A failed run opens (or updates) a single tracking issue, so the failure
+      # has somewhere to live besides an email that is easy to miss. The issue
+      # is closed automatically by the next successful run.
+      - name: Open a failure issue
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = "jobradar: scheduled run failed";
+            const body = [
+              `The scheduled scrape failed.`,
+              ``,
+              `- Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              `- Commit: ${context.sha}`,
+              `- Triggered by: ${context.eventName}`,
+              ``,
+              `The job summary on that run lists which health check failed.`,
+              `A parser_health failure usually means a source changed its markup;`,
+              `a quarantine_rate failure means the data shape moved.`,
+            ].join("\n");
+
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: "open", labels: "pipeline-failure",
+            });
+
+            if (existing.data.length) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: existing.data[0].number, body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels: ["pipeline-failure"],
+              });
+            }
+
+      - name: Close the failure issue after a good run
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const open = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: "open", labels: "pipeline-failure",
+            });
+            for (const issue of open.data) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issue.number,
+                body: `Recovered: run ${context.runId} succeeded. Closing.`,
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issue.number, state: "closed",
+              });
+            }

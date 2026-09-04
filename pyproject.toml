@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jobradar"
+version = "1.0.0"
+description = "An unattended remote-job data pipeline: scrape, validate, store, serve."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Maria Altaf", email = "mariaaltaf792@gmail.com" }]
+
+dependencies = [
+    "httpx[http2]>=0.27",
+    "pydantic>=2.6",
+    "sqlalchemy>=2.0",
+    "psycopg[binary]>=3.1",
+    "beautifulsoup4>=4.12",
+    "fastapi>=0.110",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+serve = ["uvicorn[standard]>=0.27"]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "respx>=0.21",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+jobradar = "jobradar.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
