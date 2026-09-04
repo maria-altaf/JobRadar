@@ -9,11 +9,16 @@ the timestamps being carried into the page in a form the browser can re-derive.
 from __future__ import annotations
 
 import json
+import pathlib
+import subprocess
+import sys
+import textwrap
 from datetime import timedelta
 
 import pytest
 from sqlalchemy import update
 
+import jobradar.render
 from jobradar.db import runs, utcnow
 from jobradar.export import export_site
 from jobradar.models import JobPosting
@@ -56,6 +61,73 @@ def site(populated, settings, tmp_path):
     out = tmp_path / "dist"
     summary = export_site(populated, settings, out)
     return out, summary
+
+
+class TestNoWebFrameworkNeeded:
+    """The exporter must render without a web framework installed.
+
+    The static build installs only ``requirements.txt``, which has no FastAPI in
+    it — the dashboard's dependencies are not the scraper's. Importing the
+    FastAPI app to reach ``render_page`` therefore killed the Netlify build with
+    ``ModuleNotFoundError: No module named 'fastapi'``, which is why rendering
+    lives in ``jobradar.render`` and imports nothing from the web layer.
+    """
+
+    def test_export_imports_cleanly_with_fastapi_unavailable(self):
+        # A subprocess with fastapi blocked at import time, which is the
+        # honest simulation of the build environment.
+        code = textwrap.dedent(
+            """
+            import sys
+
+            class BlockFastAPI:
+                def find_spec(self, name, path=None, target=None):
+                    if name == "fastapi" or name.startswith("fastapi."):
+                        raise ImportError("fastapi is not installed in the static build")
+                    return None
+
+            sys.meta_path.insert(0, BlockFastAPI())
+
+            import jobradar.render      # noqa: F401
+            import jobradar.export      # noqa: F401
+            import jobradar.cli         # noqa: F401
+            from jobradar.render import render_page  # noqa: F401
+            print("IMPORTS-OK")
+            """
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code], capture_output=True, text=True, timeout=120
+        )
+        assert "IMPORTS-OK" in result.stdout, (
+            "the exporter still pulls in a web framework:\n" + result.stderr[-1500:]
+        )
+
+    def test_render_module_does_not_import_the_web_layer(self):
+        source = pathlib.Path(jobradar.render.__file__).read_text(encoding="utf-8")
+        code_lines = [
+            ln for ln in source.splitlines()
+            if ln.startswith(("import ", "from ")) and "fastapi" in ln
+        ]
+        assert not code_lines, f"render.py must not import fastapi: {code_lines}"
+
+    def test_the_live_app_and_the_export_render_the_same_page(self, populated, settings, tmp_path):
+        # Two deployment paths, one renderer. If these ever diverge, the static
+        # site silently stops being the thing that was tested.
+        from jobradar import queries
+        from jobradar.render import render_page
+
+        with populated.connect() as conn:
+            snap = queries.snapshot(conn, settings.stale_after_hours)
+            jobs_ = queries.recent_jobs(conn, limit=30)
+        direct = render_page(snap, jobs_)
+
+        export_site(populated, settings, tmp_path / "dist")
+        exported = (tmp_path / "dist" / "index.html").read_text(encoding="utf-8")
+
+        # Timestamps differ by milliseconds between the two calls; compare the
+        # structure that matters instead of demanding byte equality.
+        for marker in ("<title>", "health-banner", "New postings per day", "Backend Engineer"):
+            assert marker in direct and marker in exported
 
 
 class TestWhatGetsWritten:

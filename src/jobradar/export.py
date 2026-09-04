@@ -33,7 +33,12 @@ from sqlalchemy.engine import Engine
 
 from . import queries
 from .config import Settings
-from .dashboard import _jsonable, render_page
+
+# From render, not dashboard: the exporter must not drag a web framework in.
+# The static build installs only the scraper's dependencies, and importing the
+# FastAPI app here is what made `jobradar export` die on Netlify with
+# ModuleNotFoundError: No module named 'fastapi'.
+from .render import _jsonable, render_page
 
 log = logging.getLogger(__name__)
 
