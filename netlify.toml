@@ -1,16 +1,27 @@
-# The site is pre-built and pushed by the scrape workflow, not built by
-# Netlify. That is deliberate: building here would mean giving Netlify the
-# database credentials, and the published site has no reason to hold a secret.
-# Deploying from GitHub Actions keeps DATABASE_URL inside Actions.
+# Netlify builds this site from the repository, so it renders the dashboard
+# itself rather than receiving a pre-built directory. `dist/` is generated
+# output and is not committed, which is why a build with no command fails with
+# "Deploy directory 'dist' does not exist".
 #
-# There is therefore no build command. `netlify deploy --dir=dist` uploads the
-# directory that `jobradar export` produced.
+# Building here means the build needs to reach the database. It is given a
+# dedicated **read-only** role (jobradar_readonly) rather than the credential
+# the scraper writes with: rendering a page is a pure read, so the build has no
+# business holding rights it cannot use. Verified as SELECT-only --
+# INSERT/UPDATE/DELETE/DROP/CREATE are all denied to it.
+#
+# Set DATABASE_URL in Netlify → Site configuration → Environment variables.
+# Without it the build fails loudly, which is correct: publishing an empty
+# dashboard would be worse than not publishing.
+#
+# --no-deps because Netlify has already installed requirements.txt by this
+# point; this step only puts the package itself on the path.
 
 [build]
   publish = "dist"
-  command = ""
+  command = "pip install -e . --no-deps && python -m jobradar.cli export --out dist"
 
 [build.environment]
+  PYTHON_VERSION = "3.12"
   NODE_VERSION = "20"
 
 # Redirects and headers are also emitted into dist/ by the exporter (as

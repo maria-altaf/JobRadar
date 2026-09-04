@@ -188,7 +188,12 @@ def cmd_export(args: argparse.Namespace) -> int:
 
     settings = load_settings()
     engine = make_engine(settings.database_url)
-    ensure_schema(engine)
+    # Deliberately no ensure_schema(): exporting only reads. The build that
+    # renders this site runs with a read-only database role, so issuing DDL
+    # here would fail -- and a read path that demands CREATE rights is a bug
+    # regardless of who happens to be running it.
+    if settings.database_url.startswith("sqlite"):
+        ensure_schema(engine)
 
     summary = export_site(engine, settings, args.out)
     print(

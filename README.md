@@ -335,11 +335,32 @@ That turned out to be the better fit rather than a compromise:
 
 - **The data changes once a day.** A request-time database query would return
   identical bytes to every visitor until the next run.
-- **The published site holds no credentials.** `DATABASE_URL` never leaves
-  GitHub Actions. Netlify is given files, not database access, so there is
-  nothing on the public web tier worth stealing.
 - **Nothing to cold-start,** and the page cannot break because the database is
   briefly unreachable.
+
+### The build gets a read-only database role
+
+Netlify builds the site from the repository, so the build does need to reach
+the database. It does **not** need to change anything — rendering a page is a
+pure read — so it runs as a dedicated `jobradar_readonly` role rather than with
+the credential the scraper writes with.
+
+That is the difference between a compromised build being able to disclose data
+already published on the page, and being able to drop the table. Verified
+rather than assumed:
+
+```
+[PASS] SELECT works: 907 rows in jobs
+       connected as: jobradar_readonly
+[PASS] INSERT denied: permission denied for table jobs
+[PASS] UPDATE denied: permission denied for table jobs
+[PASS] DELETE denied: permission denied for table jobs
+[PASS] DROP   denied: must be owner of table jobs
+[PASS] CREATE denied: permission denied for schema public
+```
+
+`jobradar export` issues no DDL at all for exactly this reason — a read path
+that demands `CREATE` rights is a bug regardless of who runs it.
 
 **The catch, and the fix.** A static page freezes its own timestamps. A banner
 rendered as "last success 2 h ago" would still say 2 h a week later — a health
@@ -365,18 +386,33 @@ and `api/index.py` + `vercel.json` if you ever want it served dynamically.
 
 ### Setting it up
 
-Repository secrets:
+**GitHub repository secrets:**
 
 | Secret | |
 |---|---|
-| `DATABASE_URL` | The Supabase **Session pooler** URI |
-| `NETLIFY_AUTH_TOKEN` | Netlify → User settings → Applications → personal access token |
-| `NETLIFY_SITE_ID` | Netlify → Site configuration → Site ID |
+| `DATABASE_URL` | The Supabase **Session pooler** URI, full-access role (the scraper writes) |
+| `NETLIFY_BUILD_HOOK` | Netlify → Site configuration → Build & deploy → Build hooks |
 
-The deploy step is skipped when the Netlify secrets are absent, so the scraper
-runs fine before the site exists. The built directory is uploaded as a workflow
-artifact either way, so a failed deploy can still be inspected or published by
-hand.
+**Netlify environment variables:**
+
+| Variable | |
+|---|---|
+| `DATABASE_URL` | The Supabase **Session pooler** URI, `jobradar_readonly` role |
+
+Two different credentials on purpose. The scraper needs to write; the site build
+only needs to read.
+
+> **Use the Session pooler URI, not "Direct connection".** Supabase's direct
+> host (`db.<ref>.supabase.co`) publishes only an `AAAA` record — it is
+> IPv6-only. GitHub Actions runners have no IPv6, so a direct URL works from a
+> laptop and fails every night in CI. The pooler
+> (`aws-0-<region>.pooler.supabase.com`) has an A record.
+
+The rebuild trigger is skipped when `NETLIFY_BUILD_HOOK` is absent, so the
+scraper runs fine before the site exists. Actions builds the dashboard anyway
+as a smoke test and uploads it as a workflow artifact, so a broken export shows
+up with a real log next to the run that caused it rather than as a red Netlify
+build with no context.
 
 ```bash
 jobradar export --out dist    # build the site locally

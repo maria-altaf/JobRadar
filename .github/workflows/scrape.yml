@@ -41,13 +41,12 @@ jobs:
     # generous ceiling that still catches a genuine hang.
     timeout-minutes: 20
 
-    # Job-level so the deploy step's `if:` can test whether Netlify is
+    # Job-level so the publish step's `if:` can test whether Netlify is
     # configured at all -- a step's own `env:` block is not in scope for its
     # own condition. This lets the pipeline run perfectly well before the
     # Netlify secrets exist: it simply skips publishing.
     env:
-      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-      NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+      NETLIFY_BUILD_HOOK: ${{ secrets.NETLIFY_BUILD_HOOK }}
 
     steps:
       - uses: actions/checkout@v4
@@ -74,24 +73,27 @@ jobs:
             ${{ inputs.no_resume && '--no-resume' || '' }} \
             ${{ inputs.sources && format('--sources {0}', inputs.sources) || '' }}
 
-      # Publish even when the scrape failed. A dashboard that goes red is the
-      # health indicator working; withholding it would hide exactly the thing
-      # it exists to show. `always()` runs this after a failed scrape too.
-      - name: Build the static dashboard
+      # Netlify renders the site itself from the repo, so this build is not
+      # what gets published. It runs anyway as a smoke test: if the exporter is
+      # broken, failing here gives a real log next to the run that caused it,
+      # instead of a red Netlify build with no context. It also produces the
+      # artifact below, which is a usable copy of the dashboard when Netlify is
+      # unavailable or not yet configured.
+      - name: Build the dashboard (smoke test + artifact)
         if: always()
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: jobradar export --out dist
 
-      - name: Deploy to Netlify
-        if: always() && env.NETLIFY_AUTH_TOKEN != '' && env.NETLIFY_SITE_ID != ''
+      # Publish even when the scrape failed. A dashboard that goes red is the
+      # health indicator working; withholding it would hide exactly the thing
+      # it exists to show. `always()` runs this after a failed scrape too.
+      - name: Trigger the Netlify rebuild
+        if: always() && env.NETLIFY_BUILD_HOOK != ''
         run: |
-          npx --yes netlify-cli@17 deploy \
-            --dir=dist \
-            --site="$NETLIFY_SITE_ID" \
-            --auth="$NETLIFY_AUTH_TOKEN" \
-            --prod \
-            --message "run ${{ github.run_id }} (${{ job.status }})"
+          curl --fail --silent --show-error --max-time 30 \
+            -X POST -d '{}' "$NETLIFY_BUILD_HOOK"
+          echo "Netlify rebuild triggered"
 
       # Keep the built site with the run, so a deploy that fails can still be
       # inspected and re-published by hand.
