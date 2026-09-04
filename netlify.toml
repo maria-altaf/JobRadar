@@ -1,0 +1,49 @@
+# The site is pre-built and pushed by the scrape workflow, not built by
+# Netlify. That is deliberate: building here would mean giving Netlify the
+# database credentials, and the published site has no reason to hold a secret.
+# Deploying from GitHub Actions keeps DATABASE_URL inside Actions.
+#
+# There is therefore no build command. `netlify deploy --dir=dist` uploads the
+# directory that `jobradar export` produced.
+
+[build]
+  publish = "dist"
+  command = ""
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# Redirects and headers are also emitted into dist/ by the exporter (as
+# _redirects and _headers) so a bare `netlify deploy --dir=dist` carries them
+# even without this file. They are repeated here so the intent is visible in
+# the repo rather than only in generated output.
+
+[[redirects]]
+  from = "/api/health"
+  to = "/api/health.json"
+  status = 200
+
+[[redirects]]
+  from = "/api/stats"
+  to = "/api/stats.json"
+  status = 200
+
+[[redirects]]
+  from = "/api/jobs"
+  to = "/api/jobs.json"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    # Rebuilt after every run; a short cache keeps a visitor from being shown
+    # yesterday's numbers while still absorbing repeat loads.
+    Cache-Control = "public, max-age=300, must-revalidate"
+
+[[headers]]
+  for = "/api/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Cache-Control = "public, max-age=300, must-revalidate"

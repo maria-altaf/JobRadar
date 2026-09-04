@@ -162,16 +162,26 @@ def render_page(snap: dict[str, Any], recent: list[dict[str, Any]]) -> str:
     runs = snap["runs"]
 
     # ---- health banner: colour is never the only channel, so icon + text too.
+    #
+    # The age and the state are also recomputed in the browser from the
+    # timestamps carried in the data- attributes. On the statically exported
+    # build the HTML is only as fresh as the last deploy, so a server-rendered
+    # "last success 2 h ago" would still claim 2 h a week later -- a health
+    # indicator that goes stale is worse than none at all, because it reports
+    # green precisely when things have stopped.
     icon = {"good": "●", "warning": "▲", "critical": "✕"}[health["state"]]
     last_run = health.get("last_run") or {}
     banner = f"""
-    <section class="banner banner-{health['state']}" role="status">
+    <section class="banner banner-{health['state']}" role="status" id="health-banner"
+             data-last-success="{esc(_iso(health['last_success_at']) or '')}"
+             data-stale-hours="{health['stale_after_hours']}"
+             data-state="{health['state']}">
       <div class="banner-main">
-        <span class="banner-icon">{icon}</span>
+        <span class="banner-icon" data-role="icon">{icon}</span>
         <div>
-          <div class="banner-title">{esc(health['label'])}</div>
+          <div class="banner-title" data-role="title">{esc(health['label'])}</div>
           <div class="banner-sub">
-            Last successful run {esc(_ago(health['last_success_at']))}
+            Last successful run <span data-role="age">{esc(_ago(health['last_success_at']))}</span>
             &middot; {health['consecutive_days']} consecutive day(s) green
             &middot; considered stale after {health['stale_after_hours']}h
           </div>
@@ -180,7 +190,9 @@ def render_page(snap: dict[str, Any], recent: list[dict[str, Any]]) -> str:
       <div class="banner-side">
         <div class="banner-side-label">Most recent run</div>
         <div class="banner-side-value">{esc(last_run.get('status', 'none'))}</div>
-        <div class="banner-side-sub">{esc(_ago(last_run.get('started_at')))}</div>
+        <div class="banner-side-sub"
+             data-role="age" data-at="{esc(_iso(last_run.get('started_at')) or '')}"
+             >{esc(_ago(last_run.get('started_at')))}</div>
       </div>
     </section>
     """
@@ -549,6 +561,56 @@ JS = """
     var next = root.dataset.theme==='dark' ? 'light' : 'dark';
     root.dataset.theme=next;
     try{ localStorage.setItem('jobradar-theme',next); }catch(e){}
+  });
+
+  // --- keep the health indicator honest on a statically exported page ------
+  // The HTML is rendered when the pipeline last ran. Ages baked in at render
+  // time would still read "2 h ago" days later, so they are recomputed here
+  // from the ISO timestamps, and the state is re-derived against the same
+  // staleness threshold the server uses. A frozen green banner is the one
+  // failure this whole page exists to make impossible.
+  function ago(ms){
+    var s = ms/1000;
+    if (s < 90) return Math.max(0, Math.round(s)) + 's ago';
+    if (s < 5400) return Math.round(s/60) + 'm ago';
+    if (s < 172800) return Math.round(s/3600) + 'h ago';
+    return Math.round(s/86400) + 'd ago';
+  }
+  function freshen(){
+    var b = document.getElementById('health-banner');
+    if (!b) return;
+    var now = Date.now();
+
+    b.querySelectorAll('[data-role="age"]').forEach(function(el){
+      var iso = el.dataset.at || b.dataset.lastSuccess;
+      if (iso) { var t = Date.parse(iso); if (!isNaN(t)) el.textContent = ago(now - t); }
+    });
+
+    var iso = b.dataset.lastSuccess;
+    if (!iso) return;
+    var t = Date.parse(iso);
+    if (isNaN(t)) return;
+    var hours = (now - t) / 3600000;
+    var limit = parseFloat(b.dataset.staleHours || '30');
+    if (hours > limit && b.dataset.state !== 'critical') {
+      // It has gone stale since this page was built. Say so.
+      b.classList.remove('banner-good', 'banner-warning');
+      b.classList.add('banner-critical');
+      b.dataset.state = 'critical';
+      var icon = b.querySelector('[data-role="icon"]');
+      var title = b.querySelector('[data-role="title"]');
+      if (icon) icon.textContent = '✕';
+      if (title) title.textContent = 'Stale — no successful run in ' + ago(now - t).replace(' ago','');
+    }
+  }
+  freshen();
+  setInterval(freshen, 60000);
+  // A dashboard gets left open on a second monitor overnight. Re-check when
+  // the tab is looked at again rather than making the reader wait up to a
+  // minute to find out the pipeline died while they were away.
+  window.addEventListener('focus', freshen);
+  document.addEventListener('visibilitychange', function(){
+    if (!document.hidden) freshen();
   });
 
   // Hover layer for the SVG marks. <title> children remain as the fallback.

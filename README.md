@@ -20,7 +20,7 @@ and when the whole thing runs twice by accident.
 | **Sources** | Hacker News "Ask HN: Who is hiring?" (HTML), We Work Remotely (RSS), Remote OK (JSON) |
 | **Schedule** | GitHub Actions cron, 06:15 UTC daily |
 | **Storage** | Postgres in production, SQLite for local development and CI |
-| **Dashboard** | Server-rendered FastAPI page + JSON API |
+| **Dashboard** | Static site on Netlify, rebuilt after every run, with a health indicator that goes red on its own if the pipeline stops |
 | **Alerting** | A failed run exits non-zero → the Actions job fails → GitHub emails, and a tracking issue is opened and auto-closed on recovery |
 
 Three sources rather than one, on purpose. They fail in different ways: HN is
@@ -293,7 +293,8 @@ jobradar run --no-resume      # force a fresh run
 jobradar run --sources remoteok
 jobradar status               # health and recent runs
 jobradar serve                # dashboard at http://127.0.0.1:8000
-pytest -q                     # 205 tests, no database service needed
+jobradar export --out dist    # render it as a static site
+pytest -q                     # 226 tests, no database service needed
 ```
 
 Everything tunable lives in environment variables — see `.env.example`.
@@ -306,7 +307,65 @@ Everything tunable lives in environment variables — see `.env.example`.
 |---|---|---|
 | Scraper | GitHub Actions cron | `DATABASE_URL` as a repository secret |
 | Database | Supabase Postgres | Use the **Session pooler** URI: direct connections are IPv6-only and Actions runners are IPv4-only |
-| Dashboard | See `vercel.json` / `api/index.py` | Any ASGI host works |
+| Dashboard | Netlify, as a static build | Rendered by `jobradar export` after each run and pushed from Actions |
+
+### Why the dashboard is static
+
+Netlify has no Python runtime — its Functions are JS/TS/Go only — so the
+FastAPI app cannot be *served* there. It is exported instead: after each scrape,
+the same `render_page` the live server uses writes `index.html` plus JSON, and
+Actions pushes that directory.
+
+That turned out to be the better fit rather than a compromise:
+
+- **The data changes once a day.** A request-time database query would return
+  identical bytes to every visitor until the next run.
+- **The published site holds no credentials.** `DATABASE_URL` never leaves
+  GitHub Actions. Netlify is given files, not database access, so there is
+  nothing on the public web tier worth stealing.
+- **Nothing to cold-start,** and the page cannot break because the database is
+  briefly unreachable.
+
+**The catch, and the fix.** A static page freezes its own timestamps. A banner
+rendered as "last success 2 h ago" would still say 2 h a week later — a health
+indicator that goes stale silently, reporting green at exactly the moment things
+have stopped, which is the worst failure this page could have.
+
+So the page carries ISO timestamps in `data-` attributes and recomputes the age
+and the state in the browser, on load, every minute, and whenever the tab is
+focused. Verified by driving a real browser: with `data-last-success` moved five
+days back, the banner goes from
+
+> ● Healthy — last success 2 h ago
+
+to
+
+> ✕ Stale — no successful run in 5d
+
+on its own, with no server involved. **A dashboard nobody has deployed to in a
+week reports itself as broken.**
+
+The live FastAPI app is still there — `jobradar serve` for local development,
+and `api/index.py` + `vercel.json` if you ever want it served dynamically.
+
+### Setting it up
+
+Repository secrets:
+
+| Secret | |
+|---|---|
+| `DATABASE_URL` | The Supabase **Session pooler** URI |
+| `NETLIFY_AUTH_TOKEN` | Netlify → User settings → Applications → personal access token |
+| `NETLIFY_SITE_ID` | Netlify → Site configuration → Site ID |
+
+The deploy step is skipped when the Netlify secrets are absent, so the scraper
+runs fine before the site exists. The built directory is uploaded as a workflow
+artifact either way, so a failed deploy can still be inspected or published by
+hand.
+
+```bash
+jobradar export --out dist    # build the site locally
+```
 
 ---
 

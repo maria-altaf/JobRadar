@@ -35,3 +35,6 @@ Thumbs.db
 
 # Generated dashboard snapshots
 dashboard-preview.html
+
+# Static site build output
+dist/

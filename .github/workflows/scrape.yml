@@ -41,6 +41,14 @@ jobs:
     # generous ceiling that still catches a genuine hang.
     timeout-minutes: 20
 
+    # Job-level so the deploy step's `if:` can test whether Netlify is
+    # configured at all -- a step's own `env:` block is not in scope for its
+    # own condition. This lets the pipeline run perfectly well before the
+    # Netlify secrets exist: it simply skips publishing.
+    env:
+      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+      NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -65,6 +73,35 @@ jobs:
             --trigger "${{ github.event_name }}" \
             ${{ inputs.no_resume && '--no-resume' || '' }} \
             ${{ inputs.sources && format('--sources {0}', inputs.sources) || '' }}
+
+      # Publish even when the scrape failed. A dashboard that goes red is the
+      # health indicator working; withholding it would hide exactly the thing
+      # it exists to show. `always()` runs this after a failed scrape too.
+      - name: Build the static dashboard
+        if: always()
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: jobradar export --out dist
+
+      - name: Deploy to Netlify
+        if: always() && env.NETLIFY_AUTH_TOKEN != '' && env.NETLIFY_SITE_ID != ''
+        run: |
+          npx --yes netlify-cli@17 deploy \
+            --dir=dist \
+            --site="$NETLIFY_SITE_ID" \
+            --auth="$NETLIFY_AUTH_TOKEN" \
+            --prod \
+            --message "run ${{ github.run_id }} (${{ job.status }})"
+
+      # Keep the built site with the run, so a deploy that fails can still be
+      # inspected and re-published by hand.
+      - name: Upload the built site
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-${{ github.run_id }}
+          path: dist/
+          retention-days: 14
 
       # A failed run opens (or updates) a single tracking issue, so the failure
       # has somewhere to live besides an email that is easy to miss. The issue

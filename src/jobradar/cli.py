@@ -182,6 +182,35 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_export(args: argparse.Namespace) -> int:
+    """Render the dashboard to a directory of static files."""
+    from .export import export_site
+
+    settings = load_settings()
+    engine = make_engine(settings.database_url)
+    ensure_schema(engine)
+
+    summary = export_site(engine, settings, args.out)
+    print(
+        f"exported {len(summary['files'])} file(s) "
+        f"({summary['bytes'] / 1024:.1f} KB) to {summary['out_dir']} "
+        f"— {summary['jobs']} postings, health: {summary['health']}"
+    )
+    # A red dashboard is the health indicator doing its job, so an unhealthy
+    # state is emphatically *not* a reason to withhold the page -- showing that
+    # the pipeline has stopped is the single most useful thing it can do.
+    #
+    # The only genuinely useless page is one with no data behind it at all,
+    # which is what exporting from an empty database produces.
+    if summary["jobs"] == 0 and not args.allow_empty:
+        logging.getLogger("jobradar").error(
+            "refusing to publish: the database holds no postings, so the page would "
+            "say nothing. Pass --allow-empty to override."
+        )
+        return 1
+    return 0
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
@@ -238,6 +267,15 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("status", help="print pipeline health")
     s.add_argument("--limit", type=int, default=10)
     s.set_defaults(func=cmd_status)
+
+    e = sub.add_parser("export", help="render the dashboard to a static site")
+    e.add_argument("--out", default="dist", help="output directory (default: dist)")
+    e.add_argument(
+        "--allow-empty",
+        action="store_true",
+        help="export even when there are no postings to show",
+    )
+    e.set_defaults(func=cmd_export)
 
     v = sub.add_parser("serve", help="run the dashboard locally")
     v.add_argument("--host", default="127.0.0.1")
