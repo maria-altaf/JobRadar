@@ -8,7 +8,9 @@ The point of the project is not the scraping. It is everything around it: what
 happens when a source changes its HTML, when the network drops halfway through,
 and when the whole thing runs twice by accident.
 
-<!-- BADGES -->
+[![tests](https://github.com/maria-altaf/JobRadar/actions/workflows/tests.yml/badge.svg)](https://github.com/maria-altaf/JobRadar/actions/workflows/tests.yml)
+[![scrape](https://github.com/maria-altaf/JobRadar/actions/workflows/scrape.yml/badge.svg)](https://github.com/maria-altaf/JobRadar/actions/workflows/scrape.yml)
+
 <!-- LIVE-URL -->
 
 ---
@@ -96,10 +98,23 @@ Measured on a real run: **1,199 records fetched → 906 unique rows stored.**
 **2. Running the pipeline twice.** The second run's upsert finds every
 `dedup_key` already present and updates in place.
 
+Measured in production, from *two different machines* against the same Supabase
+database — a local run, then a GitHub Actions run three minutes later:
+
 ```
-run 1:  1199 records seen → 906 new,   0 unchanged
-run 2:  1199 records seen →   0 new, 906 unchanged     ← table still 906 rows
+started (UTC)     host                       status       new   unch  quar   sec
+2026-09-04 10:50  DESKTOP-9MV7QHO/windows    succeeded    907      0    70    45
+2026-09-04 10:53  github-actions/3386532813  succeeded      0    641    70    40
+
+jobs rows           : 907
+distinct dedup_keys : 907
+duplicates          : 0
 ```
+
+The second run stored nothing new. (It reports 641 rather than 907 unchanged
+because it only *touched* 641 of them: the Remote OK and WWR feeds are windowed
+and had already moved on. Rows the run never saw are correctly left alone rather
+than counted as confirmed.)
 
 **3. Resuming a killed run.** The task that was in flight when the process died
 is re-processed from the start on restart. Harmless, because the writes are
